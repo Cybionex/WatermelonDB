@@ -36,9 +36,47 @@ jobs:
             exit 1
           fi
 
-  osv-scanner:
-    name: OSV scan (lockfiles)
+  osv-runtime:
+    name: OSV scan (runtime deps)
     runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+      - name: Install osv-scanner
+        run: |
+          curl -sSfL -o /usr/local/bin/osv-scanner \
+            https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64
+          chmod +x /usr/local/bin/osv-scanner
+      # yarn.lock v1 is a flat list with no dev/prod distinction, so it cannot be
+      # filtered. It is also not what consumers get: this is a library, so they
+      # resolve our `dependencies` ranges themselves and never see our lockfile.
+      # Resolve those ranges fresh and scan the result — that tree is what actually
+      # ships. Dev and build tooling is covered by the informational job below.
+      - name: Resolve runtime dependency tree
+        run: |
+          mkdir -p "$RUNNER_TEMP/runtime"
+          node -e '
+            const pkg = require("./package.json")
+            const { name, version, dependencies } = pkg
+            require("fs").writeFileSync(
+              `${process.env.RUNNER_TEMP}/runtime/package.json`,
+              JSON.stringify({ name, version, dependencies }, null, 2),
+            )
+          '
+          cd "$RUNNER_TEMP/runtime"
+          npm install --package-lock-only --omit=dev --ignore-scripts
+      - name: Scan runtime dependencies
+        run: osv-scanner scan source -L "$RUNNER_TEMP/runtime/package-lock.json"
+
+  osv-full:
+    name: OSV scan (all lockfiles, informational)
+    runs-on: ubuntu-24.04
+    # Dev and build tooling only — never reaches a consumer of the published
+    # package. Reported for visibility; a finding here must not block a PR that
+    # has nothing to do with it.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Install osv-scanner

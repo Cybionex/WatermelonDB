@@ -1,4 +1,3 @@
-// @flow
 import SQLiteAdapter from './index'
 import { testSchema } from '../__tests__/helpers'
 
