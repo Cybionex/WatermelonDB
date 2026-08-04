@@ -4,58 +4,136 @@ set -e
 
 workspace='native/iosTest/WatermelonTester.xcworkspace'
 scheme='WatermelonTester'
+created_sim_name='WatermelonTester-CI'
 
 # Resolve the simulator at runtime instead of pinning a name/OS pair, because CI
 # runner images ship different simulator runtimes over time and a hardcoded
 # destination fails the whole run.
 #
-# Ask xcodebuild which destinations are *eligible* for this scheme. `xcrun simctl
-# list devices available` is not a substitute: the CoreSimulator device set is
+# Set WMDB_IOS_DESTINATION to skip all of this and pass a destination directly.
+
+# Eligible destinations for *this scheme* under the *selected* Xcode. `xcrun
+# simctl list devices` is not a substitute: the CoreSimulator device set is
 # shared by every installed Xcode, so simctl lists simulators whose runtime the
-# selected Xcode cannot drive, and the build then dies with "Unable to find a
-# destination matching the provided destination specifier".
-#
-# Set WMDB_IOS_DESTINATION to override the whole lookup.
-if [ -z "$WMDB_IOS_DESTINATION" ]; then
-  destinations=$(xcodebuild -workspace "$workspace" -scheme "$scheme" -showdestinations 2>&1) || {
-    echo "$destinations" >&2
+# selected Xcode cannot drive.
+show_destinations() {
+  xcodebuild -workspace "$workspace" -scheme "$scheme" -showdestinations 2>&1
+}
+
+# Concrete iOS simulators from the "Available destinations" block. Entries under
+# "Ineligible destinations" carry an error: reason and cannot be used, and the
+# "Any iOS Simulator Device" placeholder has no real UDID.
+eligible_simulators() {
+  printf '%s\n' "$1" | awk '
+    /Available destinations/   { ok = 1; next }
+    /Ineligible destinations/  { ok = 0; next }
+    ok && /platform:iOS Simulator/ && !/placeholder/ { print }
+  '
+}
+
+# Highest iOS simulator SDK the selected Xcode ships, e.g. 18.5 for Xcode 16.4.
+max_sdk_version() {
+  xcodebuild -showsdks 2>/dev/null |
+    sed -n 's/.*-sdk iphonesimulator\([0-9][0-9.]*\).*/\1/p' |
+    awk 'function vnum(v,  a) { split(v, a, "."); return a[1] * 1000 + a[2] }
+         vnum($1) > best { best = vnum($1); v = $1 }
+         END { print v }'
+}
+
+# Highest installed iOS runtime that the selected Xcode can actually drive.
+# Prints "<version> <runtime identifier>".
+usable_runtime() {
+  xcrun simctl list runtimes available 2>/dev/null |
+    sed -n 's/^iOS \([0-9][0-9.]*\) .* - \(com\.apple\.CoreSimulator\.SimRuntime\.iOS-[0-9-]*\)$/\1 \2/p' |
+    awk -v max="$1" '
+      function vnum(v,  a) { split(v, a, "."); return a[1] * 1000 + a[2] }
+      vnum($1) <= vnum(max) && vnum($1) > best { best = vnum($1); line = $0 }
+      END { if (line) print line }'
+}
+
+# GitHub runner images install runtimes but do not always create a device on
+# every one of them, so there can be a perfectly usable runtime and still no
+# destination to run against. Create one. Device types are listed newest-first
+# and older runtimes reject newer hardware, so try until one sticks.
+create_simulator() {
+  local runtime_id="$1" device_type existing
+
+  existing=$(xcrun simctl list devices 2>/dev/null |
+    sed -n "s/^ *$created_sim_name (\([0-9A-Fa-f-]\{36\}\)) .*/\1/p" | head -1)
+  if [ -n "$existing" ]; then
+    printf '%s\n' "$existing"
+    return 0
+  fi
+
+  while read -r device_type; do
+    [ -n "$device_type" ] || continue
+    if udid=$(xcrun simctl create "$created_sim_name" "$device_type" "$runtime_id" 2>/dev/null); then
+      printf '%s\n' "$udid"
+      return 0
+    fi
+  done < <(xcrun simctl list devicetypes 2>/dev/null |
+    sed -n 's/^iPhone .*(\(com\.apple\.CoreSimulator\.SimDeviceType\.[^)]*\)).*/\1/p')
+
+  return 1
+}
+
+diagnose() {
+  echo "--- xcodebuild -showdestinations ---" >&2
+  printf '%s\n' "$destinations" >&2
+  echo "--- xcodebuild -showsdks (iphonesimulator) ---" >&2
+  xcodebuild -showsdks 2>&1 | grep -i iphonesimulator >&2 || true
+  echo "--- xcrun simctl list runtimes ---" >&2
+  xcrun simctl list runtimes >&2 2>&1 || true
+  echo "--- xcrun simctl list devices ---" >&2
+  xcrun simctl list devices >&2 2>&1 || true
+}
+
+if [ -n "$WMDB_IOS_DESTINATION" ]; then
+  echo "Using iOS destination from WMDB_IOS_DESTINATION: $WMDB_IOS_DESTINATION" >&2
+else
+  destinations=$(show_destinations) || {
+    printf '%s\n' "$destinations" >&2
     echo "error: xcodebuild -showdestinations failed" >&2
     exit 1
   }
 
-  # Keep the "Available destinations" block only — "Ineligible destinations"
-  # entries carry an error: reason and cannot be used. Drop the
-  # "Any iOS Simulator Device" placeholder, which has no real UDID.
-  eligible=$(printf '%s\n' "$destinations" | awk '
-    /Available destinations/   { ok = 1; next }
-    /Ineligible destinations/  { ok = 0; next }
-    ok && /platform:iOS Simulator/ && !/placeholder/ { print }
-  ')
-
+  eligible=$(eligible_simulators "$destinations")
   # Prefer an iPhone, but any iOS simulator beats failing.
   device=$(printf '%s\n' "$eligible" | grep 'name:iPhone' | head -1 || true)
   [ -n "$device" ] || device=$(printf '%s\n' "$eligible" | head -1)
 
-  if [ -z "$device" ]; then
-    echo "error: no iOS simulator is eligible for the $scheme scheme." >&2
-    echo "The selected Xcode ($(xcode-select -p)) has no usable iOS runtime." >&2
-    echo "Install one with: xcodebuild -downloadPlatform iOS" >&2
-    echo "$destinations" >&2
-    exit 1
+  if [ -n "$device" ]; then
+    udid=$(printf '%s\n' "$device" | sed -n 's/.*[{,] *id:\([^,}]*\).*/\1/p' | tr -d ' ')
+    name=$(printf '%s\n' "$device" | sed -n 's/.*[{,] *name:\(.*[^ ]\) *}.*/\1/p')
+  else
+    sdk=$(max_sdk_version)
+    runtime=$(usable_runtime "$sdk")
+
+    if [ -z "$runtime" ]; then
+      echo "error: no installed iOS runtime is usable by the selected Xcode" >&2
+      echo "($(xcode-select -p), iOS simulator SDK ${sdk:-unknown})." >&2
+      echo "Install one with: xcodebuild -downloadPlatform iOS" >&2
+      diagnose
+      exit 1
+    fi
+
+    echo "No simulator exists for iOS ${runtime%% *}; creating one." >&2
+    udid=$(create_simulator "${runtime#* }") || {
+      echo "error: could not create a simulator on ${runtime#* }" >&2
+      diagnose
+      exit 1
+    }
+    name="$created_sim_name (iOS ${runtime%% *})"
   fi
 
-  udid=$(printf '%s\n' "$device" | sed -n 's/.*[{,] *id:\([^,}]*\).*/\1/p' | tr -d ' ')
-  name=$(printf '%s\n' "$device" | sed -n 's/.*[{,] *name:\(.*[^ ]\) *}.*/\1/p')
-
   if [ -z "$udid" ]; then
-    echo "error: could not parse a simulator id out of: $device" >&2
+    echo "error: could not determine a simulator id" >&2
+    diagnose
     exit 1
   fi
 
   echo "Using iOS simulator: $name ($udid)" >&2
   WMDB_IOS_DESTINATION="id=$udid"
-else
-  echo "Using iOS destination from WMDB_IOS_DESTINATION: $WMDB_IOS_DESTINATION" >&2
 fi
 
 set -x
