@@ -34,7 +34,7 @@
 
 ### Changes
 
-- Updated better-sqlite3 to 11.9.1
+- Updated better-sqlite3 to 13.x (dev-only; it backs the Node SQLite adapter used in tests). 11.x declares no `engines` at all and predates Node 24, and its prebuilt x64 binary made `SqliteError` fail an `instanceof Error` check under Node 24. 13.x declares `>=22`, matching this package's own floor
 - Updated `@babel/runtime` to `^7.26.10` (was pinned to exactly `7.26.0`), fixing GHSA-968p-4wvh-cqc8. This was the only known advisory affecting a dependency that ships to consumers. Widening the exact pin to a caret range also lets apps dedupe it against their own `@babel/runtime`
 
 ### Internal
