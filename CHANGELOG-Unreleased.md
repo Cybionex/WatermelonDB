@@ -2,6 +2,8 @@
 
 ### BREAKING CHANGES
 
+- Minimum supported Node version is now 22 (`engines` moved from `>=18` to `>=22`). Node 18 and 20 are both past end-of-life, and yarn enforces `engines` as a hard error, so installing on an older Node will now fail rather than warn. The CI matrix is correspondingly `['22.x', '24.x']` — previously it listed 18, 20, 22 and 23, three of which were EOL, and never tested the current LTS
+
 ### Deprecations
 
 ### New features
