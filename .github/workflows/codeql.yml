@@ -1,0 +1,108 @@
+name: CodeQL
+
+on:
+  push:
+    branches: master
+  pull_request:
+  schedule:
+    - cron: '30 5 * * 1'
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+            runner: ubuntu-24.04
+          - language: c-cpp
+            build-mode: none
+            runner: ubuntu-24.04
+          - language: java-kotlin
+            build-mode: none
+            runner: ubuntu-24.04
+          - language: javascript-typescript
+            build-mode: none
+            runner: ubuntu-24.04
+          - language: ruby
+            build-mode: none
+            runner: ubuntu-24.04
+          # Swift requires a real build; reuse the iOS CI build setup
+          - language: swift
+            build-mode: manual
+            runner: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Swift build prerequisites (mirrors the iOS job in ci.yml) ---
+      - name: Set Node.js version
+        if: matrix.language == 'swift'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+      - name: Set Xcode version
+        if: matrix.language == 'swift'
+        uses: maxim-lobanov/setup-xcode@v1.2.1
+        with:
+          xcode-version: 16.2
+      - name: cache node_modules
+        if: matrix.language == 'swift'
+        uses: actions/cache@v4
+        with:
+          path: 'node_modules'
+          key: ${{ runner.os }}-modules-${{ hashFiles('**/yarn.lock') }}
+      - name: yarn install
+        if: matrix.language == 'swift'
+        run: yarn
+      - name: cache Pods
+        if: matrix.language == 'swift'
+        uses: actions/cache@v4
+        with:
+          path: native/iosTest/Pods
+          key: ${{ runner.os }}-pods-cache-${{ hashFiles('**/Podfile.lock') }}
+      - name: bundle install
+        if: matrix.language == 'swift'
+        run: bundle install
+      - name: pod install
+        if: matrix.language == 'swift'
+        run: yarn cocoapods
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config: |
+            paths-ignore:
+              # vendored SQLCipher/SQLite amalgamation — upstream code, tracked separately
+              - native/sqlite-cipher-amalgamation
+              # sample apps and docs site tooling, not shipped
+              - examples
+              - docs-website
+
+      - name: Build Swift (WatermelonTester workspace)
+        if: matrix.language == 'swift'
+        run: |
+          xcodebuild build \
+            -workspace native/iosTest/WatermelonTester.xcworkspace \
+            -scheme WatermelonTester \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

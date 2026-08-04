@@ -1,0 +1,47 @@
+name: Security
+
+on:
+  push:
+    branches: master
+  pull_request:
+  schedule:
+    - cron: '30 6 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  yarn-audit:
+    name: yarn audit (runtime deps)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+      - name: Audit runtime dependencies
+        run: |
+          set +e
+          yarn audit --groups dependencies
+          code=$?
+          set -e
+          # yarn audit exit code is a severity bitmask: 8 = high, 16 = critical
+          if [ $(( code & 24 )) -ne 0 ]; then
+            echo "::error::High or critical vulnerabilities found in runtime dependencies"
+            exit 1
+          fi
+
+  osv-scanner:
+    name: OSV scan (lockfiles)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install osv-scanner
+        run: |
+          curl -sSfL -o /usr/local/bin/osv-scanner \
+            https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64
+          chmod +x /usr/local/bin/osv-scanner
+      - name: Scan lockfiles
+        run: osv-scanner scan source -L yarn.lock -L Gemfile.lock

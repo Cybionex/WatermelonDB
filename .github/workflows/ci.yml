@@ -30,7 +30,13 @@ jobs:
         run: cd docs-website && yarn install && cd .. && yarn docs:build
   ios:
     runs-on: macos-15
-    name: iOS tests
+    name: iOS tests (${{ matrix.variant }})
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [sqlite, sqlcipher]
+    env:
+      WMDB_ENCRYPTED: ${{ matrix.variant == 'sqlcipher' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v3
       - name: Set Node.js version
@@ -54,7 +60,7 @@ jobs:
         id: pods-cache
         with:
           path: native/iosTest/Pods
-          key: ${{ runner.os }}-pods-cache-${{ hashFiles('**/Podfile.lock') }}
+          key: ${{ runner.os }}-pods-cache-${{ matrix.variant }}-${{ hashFiles('**/Podfile.lock') }}
       - run: bundle install
       - name: 'pod install'
         if: true # steps.pods-cache.outputs.cache-hit != 'true'

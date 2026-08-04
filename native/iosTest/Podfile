@@ -6,6 +6,10 @@ require_relative '../../node_modules/@react-native-community/cli-platform-ios/na
 
 platform :ios, '15.0'
 
+# Build the encrypted (SQLCipher) variant of WatermelonDB when WMDB_ENCRYPTED=1
+# (used by the CI matrix in .github/workflows/ci.yml)
+$isEncryptedDB = ENV['WMDB_ENCRYPTED'] == '1'
+
 hermes_enabled = true
 should_use_frameworks = false
 
