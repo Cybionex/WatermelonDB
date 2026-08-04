@@ -1,6 +1,49 @@
 #!/bin/bash
 
-set -x
 set -e
 
-xcodebuild -workspace native/iosTest/WatermelonTester.xcworkspace -scheme 'WatermelonTester' -destination 'name=iPhone 16,OS=18.1' test
+workspace='native/iosTest/WatermelonTester.xcworkspace'
+scheme='WatermelonTester'
+
+# Pick the first available iOS simulator rather than pinning a name/OS pair — CI
+# runner images ship different simulator runtimes over time, and a hardcoded
+# destination fails the whole run with "Unable to find a device matching the
+# provided destination specifier". Set WMDB_IOS_DESTINATION to override.
+first_ios_simulator() {
+  # $1: optional device name pattern (awk regex), defaults to any iOS device
+  local pattern="${1:-.}"
+  xcrun simctl list devices available | awk -v pattern="$pattern" '
+    /^-- iOS / { ios = 1; next }
+    /^-- /     { ios = 0; next }
+    ios && $0 ~ pattern && match($0, /\(([0-9A-Fa-f-]{36})\)/) {
+      udid = substr($0, RSTART + 1, RLENGTH - 2)
+      name = substr($0, 1, RSTART - 1)
+      gsub(/^[ \t]+|[ \t]+$/, "", name)
+      print udid "\t" name
+      exit
+    }
+  '
+}
+
+if [ -z "$WMDB_IOS_DESTINATION" ]; then
+  device=$(first_ios_simulator '^[ \t]*iPhone ')
+  [ -n "$device" ] || device=$(first_ios_simulator)
+
+  if [ -z "$device" ]; then
+    echo "error: no iOS simulator runtime is installed on this machine." >&2
+    echo "Install one with: xcodebuild -downloadPlatform iOS" >&2
+    echo "Available simulators:" >&2
+    xcrun simctl list devices available >&2
+    exit 1
+  fi
+
+  udid="${device%%$'\t'*}"
+  name="${device#*$'\t'}"
+  echo "Using iOS simulator: $name ($udid)"
+  WMDB_IOS_DESTINATION="id=$udid"
+else
+  echo "Using iOS destination from WMDB_IOS_DESTINATION: $WMDB_IOS_DESTINATION"
+fi
+
+set -x
+xcodebuild -workspace "$workspace" -scheme "$scheme" -destination "$WMDB_IOS_DESTINATION" test
