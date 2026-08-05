@@ -22,6 +22,7 @@
 - [SQLCipher] Zero encryption password from memory after use in Database, DatabaseBridge, and SqliteDb layers
 - [SQLCipher] Zero password on error path in `changePassword` bridge method
 - [SQLCipher] Throw error when `passphrase` is used without `jsi: true` to prevent silent fallback to unencrypted DB
+- [SQLCipher] **Security:** throw when a `passphrase` is supplied but the native build has no SQLCipher. `SqliteDb::open` guarded the key-setting code with `#ifdef SQLITE_HAS_CODEC` and had no `#else`, so on a build without SQLCipher the passphrase was silently discarded and the database opened as plaintext — with no error or warning — while the caller believed it was encrypted. `rekey` already failed loudly in this case; `open` now does too. Behaviour change: code that passes a `passphrase` to a non-SQLCipher build now gets an error instead of a silently unencrypted database
 - [SQLCipher] Make passphrase+jsi invariant run in production builds (not dev-only)
 - [SQLCipher] Forward `passphrase` in `testClone` to support encrypted database cloning
 - [Android] Align gradle property name `isEncryptedDB` with docs and iOS podspec (was `encryptedDB`)
@@ -47,3 +48,4 @@
 - Updated documentation scripts
 - [SQLCipher] Add Node Jest tests for encryption validation and passphrase plumbing
 - [SQLCipher] Add RN integration tests for encrypted DB round-trip, `changePassword`, and error cases
+- [SQLCipher] Gate the encryption integration tests on the binary's actual capability rather than on JSI mode alone. JSI is necessary for encryption but not sufficient — SQLCipher is compiled in or out — so the plain-SQLite CI variant was running encryption tests against a build that could not satisfy them. The plain variant now asserts that a passphrase is refused, which is a real test of the new guard rather than a skip

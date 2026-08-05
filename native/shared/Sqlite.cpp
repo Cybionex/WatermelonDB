@@ -55,6 +55,15 @@ SqliteDb::SqliteDb(std::string path, const char *password) {
     }
     // NOTE: The `password` parameter is `const char*` pointing to the caller's std::string buffer.
     // The caller (Database.cpp) is responsible for zeroing the source string after this call returns.
+#else
+    if (password != nullptr && strlen(password) > 0) {
+        // A passphrase was supplied, but this build has no SQLCipher. Fail loudly instead of
+        // silently handing back a plaintext database the caller believes is encrypted.
+        consoleError("Encryption was requested, but this build does not include SQLCipher");
+        sqlite3_close(sqlite);
+        sqlite = nullptr;
+        throw std::runtime_error("Encryption is not supported in this build");
+    }
 #endif
     consoleLog("Opened database at " + resolvedPath);
 }

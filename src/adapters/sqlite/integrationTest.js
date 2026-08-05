@@ -52,10 +52,56 @@ const SQLiteAdapterTest = (spec) => {
         })
       }
 
-      // Encryption tests are JSI-only (SQLCipher requires JSI dispatcher)
+      // Encryption tests are JSI-only (SQLCipher requires JSI dispatcher). JSI alone isn't
+      // enough though — SQLCipher is compiled in or out via SQLITE_HAS_CODEC, so the same JS
+      // bundle runs against both an encrypted and a plain native build.
       if (expectedDispatcherType === 'jsi') {
         spec.describe('Encryption (SQLCipher)', () => {
+          // WMDB_ENCRYPTED is consumed by the native build and never reaches this bundle, so ask
+          // the binary what it supports rather than trusting build configuration. If the two ever
+          // disagree, the binary is what actually ships.
+          const notSupported = /Encryption is not supported in this build/
+
+          const newEncryptedAdapter = (passphrase) =>
+            new SQLiteAdapter({
+              schema: testSchema,
+              dbName: `file:testdb${Math.random()}?mode=memory&cache=shared`,
+              passphrase,
+              jsi: true,
+            })
+
+          const supportsEncryption = async () => {
+            try {
+              await newEncryptedAdapter('probe-passphrase')._initPromise
+              return true
+            } catch (error) {
+              if (notSupported.test(error.message)) {
+                return false
+              }
+              throw error
+            }
+          }
+
+          spec.it('refuses a passphrase when the build has no SQLCipher', async () => {
+            if (await supportsEncryption()) {
+              return
+            }
+            // Without SQLCipher a passphrase must be a hard error. Silently returning a plaintext
+            // database the caller believes is encrypted is the failure mode this guards against.
+            let didThrow = false
+            try {
+              await newEncryptedAdapter('test-secret-passphrase')._initPromise
+            } catch (error) {
+              didThrow = true
+              expect(error.message).toMatch(notSupported)
+            }
+            expect(didThrow).toBe(true)
+          })
+
           spec.it('encrypted DB round-trip', async () => {
+            if (!(await supportsEncryption())) {
+              return
+            }
             const dbName = `file:testdb${Math.random()}?mode=memory&cache=shared`
             const passphrase = 'test-secret-passphrase'
             const adapter = new DatabaseAdapterCompat(
@@ -76,6 +122,9 @@ const SQLiteAdapterTest = (spec) => {
           // This scenario is best tested with file-based databases on device.
 
           spec.it('changePassword works', async () => {
+            if (!(await supportsEncryption())) {
+              return
+            }
             const dbName = `file:testdb${Math.random()}?mode=memory&cache=shared`
             const passphrase = 'original-password'
             const rawAdapter = new SQLiteAdapter({
@@ -99,6 +148,9 @@ const SQLiteAdapterTest = (spec) => {
           })
 
           spec.it('changePassword with empty string throws', async () => {
+            if (!(await supportsEncryption())) {
+              return
+            }
             const dbName = `file:testdb${Math.random()}?mode=memory&cache=shared`
             const passphrase = 'test-secret'
             const rawAdapter = new SQLiteAdapter({
