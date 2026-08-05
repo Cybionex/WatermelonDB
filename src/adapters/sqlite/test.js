@@ -11,6 +11,14 @@ function removeIfExists(file, dbName) {
   }
 }
 
+// NOTE: pid + counter rather than Math.random(). These are only required to be unique, and Jest
+// runs test files across worker processes, so the pid is what keeps file-backed databases from
+// colliding between workers — a counter alone would not. It also avoids CodeQL's
+// js/insecure-randomness, which flags Math.random() reaching the adapter constructor because that
+// constructor accepts a `passphrase`, even though this value is only a filename.
+let dbNameCounter = 0
+const uniqueDbSuffix = () => `${process.pid}-${(dbNameCounter += 1)}`
+
 describe.each([
   // ['SQLiteAdapterNode', 'Asynchronous', 'File'],
   ['SQLiteAdapterNode', 'Asynchronous', 'Memory'],
@@ -33,7 +41,7 @@ describe.each([
         fs.mkdirSync('.tmp')
       }
 
-      const dbName = `${process.cwd()}/test${Math.random()}.db${
+      const dbName = `${process.cwd()}/test${uniqueDbSuffix()}.db${
         file ? '' : '?mode=memory&cache=shared'
       }`
       const extraAdapterOptions = {

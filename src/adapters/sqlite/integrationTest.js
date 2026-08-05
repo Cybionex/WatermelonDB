@@ -5,6 +5,13 @@ import commonTests from '../__tests__/commonTests'
 import { invariant } from '../../utils/common'
 import DatabaseAdapterCompat from '../compat'
 
+// NOTE: a counter rather than Math.random(). These names only need to be unique within a run, and
+// a counter cannot collide at all. It also keeps CodeQL quiet: js/insecure-randomness flags
+// Math.random() reaching the SQLiteAdapter constructor, because that constructor also accepts a
+// `passphrase` and so counts as a security context — even though the value is only a filename.
+let dbNameCounter = 0
+const testDbName = () => `file:testdb${(dbNameCounter += 1)}?mode=memory&cache=shared`
+
 const SQLiteAdapterTest = (spec) => {
   const configurations = [
     Platform.OS !== 'windows'
@@ -31,7 +38,7 @@ const SQLiteAdapterTest = (spec) => {
       testCasesToRun.forEach((testCase) => {
         const [name, test] = testCase
         spec.it(name, async () => {
-          const dbName = `file:testdb${Math.random()}?mode=memory&cache=shared`
+          const dbName = testDbName()
           const adapter = new SQLiteAdapter({ schema: testSchema, dbName, ...options })
           invariant(
             adapter._dispatcherType === expectedDispatcherType,
@@ -68,7 +75,7 @@ const SQLiteAdapterTest = (spec) => {
           const newAdapter = (extra) =>
             new SQLiteAdapter({
               schema: testSchema,
-              dbName: `file:testdb${Math.random()}?mode=memory&cache=shared`,
+              dbName: testDbName(),
               jsi: true,
               ...extra,
             })
@@ -105,7 +112,7 @@ const SQLiteAdapterTest = (spec) => {
             if (!(await supportsEncryption())) {
               return
             }
-            const dbName = `file:testdb${Math.random()}?mode=memory&cache=shared`
+            const dbName = testDbName()
             const passphrase = 'test-secret-passphrase'
             const adapter = new DatabaseAdapterCompat(
               new SQLiteAdapter({ schema: testSchema, dbName, passphrase, jsi: true }),
@@ -128,7 +135,7 @@ const SQLiteAdapterTest = (spec) => {
             if (!(await supportsEncryption())) {
               return
             }
-            const dbName = `file:testdb${Math.random()}?mode=memory&cache=shared`
+            const dbName = testDbName()
             const passphrase = 'original-password'
             const rawAdapter = new SQLiteAdapter({
               schema: testSchema,
@@ -154,7 +161,7 @@ const SQLiteAdapterTest = (spec) => {
             if (!(await supportsEncryption())) {
               return
             }
-            const dbName = `file:testdb${Math.random()}?mode=memory&cache=shared`
+            const dbName = testDbName()
             const passphrase = 'test-secret'
             const rawAdapter = new SQLiteAdapter({
               schema: testSchema,

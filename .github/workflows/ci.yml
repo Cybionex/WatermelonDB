@@ -5,6 +5,11 @@ on:
   push:
     branches: master
 
+# None of these jobs write to the repository — they only need to read it out. Declared at the
+# top level so every job inherits it, matching security.yml and codeql.yml.
+permissions:
+  contents: read
+
 jobs:
   ci-check:
     runs-on: ubuntu-22.04
