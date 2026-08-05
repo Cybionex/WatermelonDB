@@ -60,25 +60,29 @@ const SQLiteAdapterTest = (spec) => {
           // WMDB_ENCRYPTED is consumed by the native build and never reaches this bundle, so ask
           // the binary what it supports rather than trusting build configuration. If the two ever
           // disagree, the binary is what actually ships.
-          const notSupported = /Encryption is not supported in this build/
-
-          const newEncryptedAdapter = (passphrase) =>
+          //
+          // Probe by behaviour rather than by error message: iOS forwards the native message
+          // ("Encryption is not supported in this build") verbatim, but on Android a failed open
+          // leaves the JSI object unpopulated, so makeDispatcher reports a generic "database
+          // failed to open" instead and the original cause is lost.
+          const newAdapter = (extra) =>
             new SQLiteAdapter({
               schema: testSchema,
               dbName: `file:testdb${Math.random()}?mode=memory&cache=shared`,
-              passphrase,
               jsi: true,
+              ...extra,
             })
 
           const supportsEncryption = async () => {
             try {
-              await newEncryptedAdapter('probe-passphrase')._initPromise
+              await newAdapter({ passphrase: 'probe-passphrase' })._initPromise
               return true
             } catch (error) {
-              if (notSupported.test(error.message)) {
-                return false
-              }
-              throw error
+              // Opening with a passphrase failed. Confirm that is specific to encryption — if a
+              // plain adapter also fails, something else is broken and should surface, not be
+              // silently reported as "encryption unsupported".
+              await newAdapter({})._initPromise
+              return false
             }
           }
 
@@ -90,10 +94,9 @@ const SQLiteAdapterTest = (spec) => {
             // database the caller believes is encrypted is the failure mode this guards against.
             let didThrow = false
             try {
-              await newEncryptedAdapter('test-secret-passphrase')._initPromise
+              await newAdapter({ passphrase: 'test-secret-passphrase' })._initPromise
             } catch (error) {
               didThrow = true
-              expect(error.message).toMatch(notSupported)
             }
             expect(didThrow).toBe(true)
           })
