@@ -1157,7 +1157,18 @@ export default () => {
         Error,
       )
     } else {
-      await expect(adapterPromise).rejects.toBeInstanceOf(Error)
+      // NOTE: deliberately not `toBeInstanceOf(Error)`. better-sqlite3 hands its SqliteError
+      // class to the native addon once per process (guarded by `addon.isInitialized`), but Jest
+      // gives every test file its own realm with its own `Error` global. Whichever test file
+      // opens a database first installs *its* SqliteError, so errors delivered to a different
+      // test file carry a prototype chain rooted in another realm's Error and `instanceof Error`
+      // is false — intermittently, depending on how Jest distributes files across workers.
+      let error = null
+      await adapterPromise.catch((e) => {
+        error = e
+      })
+      expect(error).not.toBe(null)
+      expect(typeof error.message).toBe('string')
     }
   })
   it('can actually save and read from file system', async (_adapter, AdapterClass, extraAdapterOptions, platform) => {
