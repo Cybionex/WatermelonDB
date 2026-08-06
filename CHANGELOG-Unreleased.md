@@ -42,7 +42,7 @@
 
 - Updated internal dependencies
 - Refreshed `yarn.lock` and `Gemfile.lock` within existing version ranges, clearing 99 known advisories in dev/build-only tooling (no dependency ranges changed apart from `@babel/runtime`)
-- Scoped the blocking OSV CI gate to the production dependency tree, since `yarn.lock` cannot express dev vs prod and consumers resolve our `dependencies` ranges themselves; dev/build tooling is now scanned informationally
+- Scoped the OSV CI gate to the production dependency tree, since `yarn.lock` cannot express dev vs prod and consumers resolve our `dependencies` ranges themselves rather than using our lockfile. Dev and build tooling is not scanned; Dependabot covers it
 - Ignore `flow-estree`, `flow-parser`, `metro-file-map` and `metro-resolver` in `.flowconfig`, whose newer `.js.flow` files the pinned flow-bin cannot parse
 - Fix the 24 Flow errors blocking `yarn ci:check`: drop the stray `// @flow` pragma from `encryption.test.js` (the only test file of 82 that had one, so the only one checked against undeclared jest globals), and rework the conditional spreads in `testClone` to avoid `[exponential-spread]`
 - Updated documentation scripts
