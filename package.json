@@ -135,7 +135,7 @@
     "better-sqlite3": "^13.0.0",
     "big-list-of-naughty-strings": "https://github.com/radex/big-list-of-naughty-strings#8346238a82f1e3a6f62389def1e668d80e4023fb",
     "cavy": "git+https://github.com/Nozbe/cavy.git",
-    "chokidar": "^3.6.0",
+    "chokidar": "^5.0.0",
     "chokidar-cli": "^3.0.0",
     "concurrently": "^7.6.0",
     "eslint": "^8.34.0",
