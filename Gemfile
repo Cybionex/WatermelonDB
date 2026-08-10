@@ -8,7 +8,7 @@ gem 'pry'
 # bound in the template on Cocoapods with next React Native release.
 gem 'cocoapods', '>= 1.13', '< 1.15'
 gem 'activesupport', '>= 6.1.7.5', '< 7.1.0' # temporary?
-gem 'xcodeproj', '< 1.26.0'
+gem 'xcodeproj', '< 1.29.0'
 
 # NOTE: TEMPORARY, for darwin-arm64 compatibility
 gem 'ffi', '>1.14.2'
