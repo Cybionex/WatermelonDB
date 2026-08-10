@@ -12,11 +12,11 @@
     "react-native-windows": "0.71.28"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0",
+    "@babel/core": "^7.29.6",
     "@babel/generator": "^7.20.0",
     "@babel/preset-env": "^7.8.4",
     "@babel/preset-typescript": "^7.8.3",
-    "@babel/runtime": "^7.8.4",
+    "@babel/runtime": "^8.0.0",
     "@react-native-windows/automation": "^0.3.110",
     "@react-native-windows/automation-commands": "^0.1.130",
     "@react-native/babel-plugin-codegen": "0.73.0",
