@@ -5,13 +5,20 @@ on:
   push:
     branches: master
 
+# None of these jobs write to the repository — they only need to read it out. Declared at the
+# top level so every job inherits it, matching security.yml and codeql.yml.
+permissions:
+  contents: read
+
 jobs:
   ci-check:
     runs-on: ubuntu-22.04
     name: JavaScript tests
     strategy:
+      # report every leg; a failure on one Node version shouldn't hide the others
+      fail-fast: false
       matrix:
-        node-version: ['18.x', '20.x', '22.x', '23.x']
+        node-version: ['22.x', '24.x']
     steps:
       - uses: actions/checkout@v3
       - name: Set Node.js version
@@ -30,7 +37,13 @@ jobs:
         run: cd docs-website && yarn install && cd .. && yarn docs:build
   ios:
     runs-on: macos-15
-    name: iOS tests
+    name: iOS tests (${{ matrix.variant }})
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [sqlite, sqlcipher]
+    env:
+      WMDB_ENCRYPTED: ${{ matrix.variant == 'sqlcipher' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v3
       - name: Set Node.js version
@@ -40,7 +53,10 @@ jobs:
       - name: Set Xcode version
         uses: maxim-lobanov/setup-xcode@v1.2.1
         with:
-          xcode-version: 16.2
+          # 16.2 caps out at the iOS 18.2 SDK, but the macos-15 image only ships
+          # iOS 18.5+ simulator runtimes, so no simulator is eligible for it.
+          # 16.4 is the image default and ships the iOS 18.5 SDK.
+          xcode-version: 16.4
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1
       - name: cache node_modules
@@ -54,7 +70,7 @@ jobs:
         id: pods-cache
         with:
           path: native/iosTest/Pods
-          key: ${{ runner.os }}-pods-cache-${{ hashFiles('**/Podfile.lock') }}
+          key: ${{ runner.os }}-pods-cache-${{ matrix.variant }}-${{ hashFiles('**/Podfile.lock') }}
       - run: bundle install
       - name: 'pod install'
         if: true # steps.pods-cache.outputs.cache-hit != 'true'

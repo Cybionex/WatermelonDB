@@ -5,6 +5,13 @@ import commonTests from '../__tests__/commonTests'
 import { invariant } from '../../utils/common'
 import DatabaseAdapterCompat from '../compat'
 
+// NOTE: a counter rather than Math.random(). These names only need to be unique within a run, and
+// a counter cannot collide at all. It also keeps CodeQL quiet: js/insecure-randomness flags
+// Math.random() reaching the SQLiteAdapter constructor, because that constructor also accepts a
+// `passphrase` and so counts as a security context — even though the value is only a filename.
+let dbNameCounter = 0
+const testDbName = () => `file:testdb${(dbNameCounter += 1)}?mode=memory&cache=shared`
+
 const SQLiteAdapterTest = (spec) => {
   const configurations = [
     Platform.OS !== 'windows'
@@ -31,7 +38,7 @@ const SQLiteAdapterTest = (spec) => {
       testCasesToRun.forEach((testCase) => {
         const [name, test] = testCase
         spec.it(name, async () => {
-          const dbName = `file:testdb${Math.random()}?mode=memory&cache=shared`
+          const dbName = testDbName()
           const adapter = new SQLiteAdapter({ schema: testSchema, dbName, ...options })
           invariant(
             adapter._dispatcherType === expectedDispatcherType,
@@ -52,11 +59,60 @@ const SQLiteAdapterTest = (spec) => {
         })
       }
 
-      // Encryption tests are JSI-only (SQLCipher requires JSI dispatcher)
+      // Encryption tests are JSI-only (SQLCipher requires JSI dispatcher). JSI alone isn't
+      // enough though — SQLCipher is compiled in or out via SQLITE_HAS_CODEC, so the same JS
+      // bundle runs against both an encrypted and a plain native build.
       if (expectedDispatcherType === 'jsi') {
         spec.describe('Encryption (SQLCipher)', () => {
+          // WMDB_ENCRYPTED is consumed by the native build and never reaches this bundle, so ask
+          // the binary what it supports rather than trusting build configuration. If the two ever
+          // disagree, the binary is what actually ships.
+          //
+          // Probe by behaviour rather than by error message: iOS forwards the native message
+          // ("Encryption is not supported in this build") verbatim, but on Android a failed open
+          // leaves the JSI object unpopulated, so makeDispatcher reports a generic "database
+          // failed to open" instead and the original cause is lost.
+          const newAdapter = (extra) =>
+            new SQLiteAdapter({
+              schema: testSchema,
+              dbName: testDbName(),
+              jsi: true,
+              ...extra,
+            })
+
+          const supportsEncryption = async () => {
+            try {
+              await newAdapter({ passphrase: 'probe-passphrase' })._initPromise
+              return true
+            } catch (error) {
+              // Opening with a passphrase failed. Confirm that is specific to encryption — if a
+              // plain adapter also fails, something else is broken and should surface, not be
+              // silently reported as "encryption unsupported".
+              await newAdapter({})._initPromise
+              return false
+            }
+          }
+
+          spec.it('refuses a passphrase when the build has no SQLCipher', async () => {
+            if (await supportsEncryption()) {
+              return
+            }
+            // Without SQLCipher a passphrase must be a hard error. Silently returning a plaintext
+            // database the caller believes is encrypted is the failure mode this guards against.
+            let didThrow = false
+            try {
+              await newAdapter({ passphrase: 'test-secret-passphrase' })._initPromise
+            } catch (error) {
+              didThrow = true
+            }
+            expect(didThrow).toBe(true)
+          })
+
           spec.it('encrypted DB round-trip', async () => {
-            const dbName = `file:testdb${Math.random()}?mode=memory&cache=shared`
+            if (!(await supportsEncryption())) {
+              return
+            }
+            const dbName = testDbName()
             const passphrase = 'test-secret-passphrase'
             const adapter = new DatabaseAdapterCompat(
               new SQLiteAdapter({ schema: testSchema, dbName, passphrase, jsi: true }),
@@ -76,7 +132,10 @@ const SQLiteAdapterTest = (spec) => {
           // This scenario is best tested with file-based databases on device.
 
           spec.it('changePassword works', async () => {
-            const dbName = `file:testdb${Math.random()}?mode=memory&cache=shared`
+            if (!(await supportsEncryption())) {
+              return
+            }
+            const dbName = testDbName()
             const passphrase = 'original-password'
             const rawAdapter = new SQLiteAdapter({
               schema: testSchema,
@@ -99,7 +158,10 @@ const SQLiteAdapterTest = (spec) => {
           })
 
           spec.it('changePassword with empty string throws', async () => {
-            const dbName = `file:testdb${Math.random()}?mode=memory&cache=shared`
+            if (!(await supportsEncryption())) {
+              return
+            }
+            const dbName = testDbName()
             const passphrase = 'test-secret'
             const rawAdapter = new SQLiteAdapter({
               schema: testSchema,

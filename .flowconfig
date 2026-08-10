@@ -13,6 +13,10 @@
 .*/node_modules/metro\-config/.*
 .*/node_modules/hermes\-estree/.*
 .*/node_modules/metro/.*
+.*/node_modules/flow\-estree/.*
+.*/node_modules/flow\-parser/.*
+.*/node_modules/metro\-file\-map/.*
+.*/node_modules/metro\-resolver/.*
 
 [libs]
 flow-typed/

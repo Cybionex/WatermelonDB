@@ -3,7 +3,7 @@
   "description": "Build powerful React Native and React web apps that scale from hundreds to tens of thousands of records and remain fast",
   "version": "0.28.1-1",
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "up": "yarn",
@@ -62,7 +62,7 @@
     "url": "https://github.com/Nozbe/WatermelonDB.git"
   },
   "dependencies": {
-    "@babel/runtime": "7.26.0",
+    "@babel/runtime": "^7.26.10",
     "@nozbe/simdjson": "3.9.4",
     "@nozbe/sqlite": "3.46.0",
     "hoist-non-react-statics": "^3.3.2",
@@ -132,7 +132,7 @@
     "babel-plugin-minify-guarded-expressions": "^0.4.4",
     "babel-plugin-minify-replace": "^0.5.0",
     "babel-plugin-module-resolver": "^5.0.2",
-    "better-sqlite3": "^11.0.0",
+    "better-sqlite3": "^13.0.0",
     "big-list-of-naughty-strings": "https://github.com/radex/big-list-of-naughty-strings#8346238a82f1e3a6f62389def1e668d80e4023fb",
     "cavy": "git+https://github.com/Nozbe/cavy.git",
     "chokidar": "^3.6.0",

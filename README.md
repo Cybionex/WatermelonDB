@@ -36,7 +36,7 @@ This is a fork of [WatermelonDB](https://github.com/Nozbe/WatermelonDB) created 
 
 This fork includes encryption support via SQLCipher, based on an open pull request ([#1635](https://github.com/Nozbe/WatermelonDB/pull/1635)) by [@ororsatti](https://github.com/ororsatti).
 
-This fork maintains the original MIT License. See the [LICENSE](./LICENSE) file for full license text.
+This fork maintains the original MIT License. See the [LICENSE](https://github.com/Cybionex/WatermelonDB/blob/master/LICENSE) file for full license text.
 
 ---
 

@@ -2,6 +2,8 @@
 
 ### BREAKING CHANGES
 
+- Minimum supported Node version is now 22 (`engines` moved from `>=18` to `>=22`). Node 18 and 20 are both past end-of-life, and yarn enforces `engines` as a hard error, so installing on an older Node will now fail rather than warn. The CI matrix is correspondingly `['22.x', '24.x']` — previously it listed 18, 20, 22 and 23, three of which were EOL, and never tested the current LTS
+
 ### Deprecations
 
 ### New features
@@ -20,22 +22,32 @@
 - [SQLCipher] Zero encryption password from memory after use in Database, DatabaseBridge, and SqliteDb layers
 - [SQLCipher] Zero password on error path in `changePassword` bridge method
 - [SQLCipher] Throw error when `passphrase` is used without `jsi: true` to prevent silent fallback to unencrypted DB
+- [SQLCipher] **Security:** throw when a `passphrase` is supplied but the native build has no SQLCipher. `SqliteDb::open` guarded the key-setting code with `#ifdef SQLITE_HAS_CODEC` and had no `#else`, so on a build without SQLCipher the passphrase was silently discarded and the database opened as plaintext — with no error or warning — while the caller believed it was encrypted. `rekey` already failed loudly in this case; `open` now does too. Behaviour change: code that passes a `passphrase` to a non-SQLCipher build now gets an error instead of a silently unencrypted database
 - [SQLCipher] Make passphrase+jsi invariant run in production builds (not dev-only)
 - [SQLCipher] Forward `passphrase` in `testClone` to support encrypted database cloning
 - [Android] Align gradle property name `isEncryptedDB` with docs and iOS podspec (was `encryptedDB`)
 - [Native] Restore `#include` in shared C++ headers for MSVC/GCC portability (revert `#import`)
 - [Native] Restore standard `public:`/`private:` indentation in shared header class declarations
 - [Native] Clean up debug log markers (`#####`) in encryption path
+- [SQLCipher] Add missing `changePassword` to the Node dispatcher, so calling it without JSI throws the documented "only supported with JSI" error instead of `this._dispatcher.changePassword is not a function`
 
 ### Performance
 
 ### Changes
 
-- Updated better-sqlite3 to 11.9.1
+- Updated better-sqlite3 to 13.x (dev-only; it backs the Node SQLite adapter used in tests). 11.x declares no `engines` at all and predates Node 24, and its prebuilt x64 binary made `SqliteError` fail an `instanceof Error` check under Node 24. 13.x declares `>=22`, matching this package's own floor
+- Updated `@babel/runtime` to `^7.26.10` (was pinned to exactly `7.26.0`), fixing GHSA-968p-4wvh-cqc8. This was the only known advisory affecting a dependency that ships to consumers. Widening the exact pin to a caret range also lets apps dedupe it against their own `@babel/runtime`
 
 ### Internal
 
 - Updated internal dependencies
+- Refreshed `yarn.lock` and `Gemfile.lock` within existing version ranges, clearing 99 known advisories in dev/build-only tooling (no dependency ranges changed apart from `@babel/runtime`)
+- Scoped the OSV CI gate to the production dependency tree, since `yarn.lock` cannot express dev vs prod and consumers resolve our `dependencies` ranges themselves rather than using our lockfile. Dev and build tooling is not scanned; Dependabot covers it
+- Ignore `flow-estree`, `flow-parser`, `metro-file-map` and `metro-resolver` in `.flowconfig`, whose newer `.js.flow` files the pinned flow-bin cannot parse
+- Fix the 24 Flow errors blocking `yarn ci:check`: drop the stray `// @flow` pragma from `encryption.test.js` (the only test file of 82 that had one, so the only one checked against undeclared jest globals), and rework the conditional spreads in `testClone` to avoid `[exponential-spread]`
 - Updated documentation scripts
 - [SQLCipher] Add Node Jest tests for encryption validation and passphrase plumbing
 - [SQLCipher] Add RN integration tests for encrypted DB round-trip, `changePassword`, and error cases
+- Fix an intermittent failure in the "errors when migration fails" adapter test. better-sqlite3 hands its `SqliteError` class to the native addon once per process (`addon.isInitialized`), while Jest gives each test file its own realm and its own `Error` global. Whichever test file opened a database first installed *its* `SqliteError`, so errors delivered to the other file were rooted in a different realm's `Error` and `toBeInstanceOf(Error)` failed depending on how Jest distributed files across workers. The assertion no longer depends on realm-bound `Error` identity. This only became reachable once `encryption.test.js` made a second test file open a SQLite database
+- Align the CodeQL Swift job's Xcode version with the iOS job in ci.yml (16.2 → 16.4). 16.2 caps out at the iOS 18.2 SDK while the macos-15 image ships only iOS 18.5+ runtimes, so `ibtool` failed to compile `LaunchScreen.xib` with "iOS 18.2 Platform Not Installed"
+- [SQLCipher] Gate the encryption integration tests on the binary's actual capability rather than on JSI mode alone. JSI is necessary for encryption but not sufficient — SQLCipher is compiled in or out — so the plain-SQLite CI variant was running encryption tests against a build that could not satisfy them. The plain variant now asserts that a passphrase is refused, which is a real test of the new guard rather than a skip. The check probes behaviour rather than matching an error message, because a failed open on Android leaves the JSI object unpopulated and `makeDispatcher` reports a generic "database failed to open" that discards the underlying cause, while iOS forwards it verbatim

@@ -115,13 +115,21 @@ export default class SQLiteAdapter implements DatabaseAdapter {
 
   // eslint-disable-next-line no-use-before-define
   async testClone(options?: $Shape<SQLiteAdapterOptions> = {}): Promise<SQLiteAdapter> {
+    // NOTE: accumulated into one object rather than spread inline, so that Flow only has to
+    // reason about a single union per spread (see [exponential-spread])
+    const inherited: $Shape<SQLiteAdapterOptions> = {}
+    if (this.migrations) {
+      inherited.migrations = this.migrations
+    }
+    if (this.passphrase) {
+      inherited.passphrase = this.passphrase
+    }
     // $FlowFixMe
     const clone = new SQLiteAdapter({
       dbName: this.dbName,
       schema: this.schema,
       jsi: this._dispatcherType === 'jsi',
-      ...(this.migrations ? { migrations: this.migrations } : {}),
-      ...(this.passphrase ? { passphrase: this.passphrase } : {}),
+      ...inherited,
       ...options,
     })
     invariant(

@@ -19,6 +19,12 @@ class SqliteNodeDispatcher implements SqliteDispatcher {
     this._tag = tag
   }
 
+  changePassword(_password: string): void {
+    throw new Error(
+      'changePassword is only supported with JSI. Pass { jsi: true } to SQLiteAdapter constructor.',
+    )
+  }
+
   call(methodName: SqliteDispatcherMethod, args: any[], callback: ResultCallback<any>): void {
     // $FlowFixMe
     const method = DatabaseBridge[methodName].bind(DatabaseBridge)

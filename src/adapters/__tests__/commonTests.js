@@ -29,6 +29,8 @@ import {
   modelQuery,
 } from './helpers'
 
+let dbFileCounter = 0
+
 class BadModel extends Model {
   static table = 'nonexistent'
 }
@@ -1157,7 +1159,18 @@ export default () => {
         Error,
       )
     } else {
-      await expect(adapterPromise).rejects.toBeInstanceOf(Error)
+      // NOTE: deliberately not `toBeInstanceOf(Error)`. better-sqlite3 hands its SqliteError
+      // class to the native addon once per process (guarded by `addon.isInitialized`), but Jest
+      // gives every test file its own realm with its own `Error` global. Whichever test file
+      // opens a database first installs *its* SqliteError, so errors delivered to a different
+      // test file carry a prototype chain rooted in another realm's Error and `instanceof Error`
+      // is false — intermittently, depending on how Jest distributes files across workers.
+      let error = null
+      await adapterPromise.catch((e) => {
+        error = e
+      })
+      expect(error).not.toBe(null)
+      expect(typeof error.message).toBe('string')
     }
   })
   it('can actually save and read from file system', async (_adapter, AdapterClass, extraAdapterOptions, platform) => {
@@ -1166,10 +1179,14 @@ export default () => {
       return
     }
 
+    // NOTE: pid + counter rather than Math.random() — unique is all that's needed, and Jest spreads
+    // test files across worker processes, so the pid is what prevents these file-backed databases
+    // from colliding between workers. Also avoids CodeQL's js/insecure-randomness, which treats the
+    // adapter constructor as a security context because it accepts a `passphrase`.
+    // (process.pid is undefined under React Native, where there is only one process anyway)
+    const suffix = `${process.pid || 'rn'}-${(dbFileCounter += 1)}`
     const fileName =
-      platform === 'node'
-        ? `.tmp/testDatabase-${Math.random()}.db`
-        : `testDatabase-${Math.random()}.db`
+      platform === 'node' ? `.tmp/testDatabase-${suffix}.db` : `testDatabase-${suffix}.db`
 
     const adapter = new DatabaseAdapterCompat(
       new AdapterClass({
