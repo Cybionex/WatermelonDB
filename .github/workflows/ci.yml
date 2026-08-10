@@ -103,7 +103,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
       # See: https://github.com/android/compose-samples/actions/runs/27015993/workflow for ideas for caching
       - name: run tests
-        uses: reactivecircus/android-emulator-runner@v2.33.0
+        uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 29
           working-directory: ./native/androidTest
