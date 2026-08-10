@@ -29,7 +29,7 @@ buildscript {
 
 configurations.all {
     resolutionStrategy {
-        force "com.facebook.soloader:soloader:0.8.2"
+        force "com.facebook.soloader:soloader:0.12.1"
     }
 }
 
