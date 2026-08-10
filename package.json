@@ -137,7 +137,7 @@
     "cavy": "git+https://github.com/Nozbe/cavy.git",
     "chokidar": "^3.6.0",
     "chokidar-cli": "^3.0.0",
-    "concurrently": "^7.6.0",
+    "concurrently": "^10.0.4",
     "eslint": "^8.34.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-flowtype": "^8.0.3",
