@@ -62,7 +62,7 @@
     "url": "https://github.com/Nozbe/WatermelonDB.git"
   },
   "dependencies": {
-    "@babel/runtime": "^7.26.10",
+    "@babel/runtime": "^8.0.0",
     "@nozbe/simdjson": "3.9.4",
     "@nozbe/sqlite": "3.46.0",
     "hoist-non-react-statics": "^3.3.2",
